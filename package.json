@@ -1,0 +1,15 @@
+{
+    "name": "financeflow-ios",
+    "version": "1.0.0",
+    "description": "FinanceFlow empacotado como app iOS nativo via Capacitor",
+    "scripts": {
+          "sync": "npx cap sync ios"
+    },
+    "dependencies": {
+          "@capacitor/core": "^6.1.2",
+          "@capacitor/ios": "^6.1.2"
+    },
+    "devDependencies": {
+          "@capacitor/cli": "^6.1.2"
+    }
+}
