@@ -39,11 +39,16 @@ workflows:
         script: xcode-project use-profiles
       - name: Increment build number
         script: |
-          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$BUNDLE_ID" || echo 0)
-          NEW_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
-          echo "Setting build number to $NEW_BUILD_NUMBER"
-          PLIST=$(find ios/App -name "Info.plist" -path "*/App/*" | head -1)
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD_NUMBER" "$PLIST"
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$BUNDLE_ID" 2>/dev/null || echo 0)
+          CANDIDATE=$((LATEST_BUILD_NUMBER + 1))
+          if [ "$BUILD_NUMBER" -gt "$CANDIDATE" ]; then
+            NEW_BUILD_NUMBER=$BUILD_NUMBER
+          else
+            NEW_BUILD_NUMBER=$CANDIDATE
+          fi
+          echo "Latest App Store build: $LATEST_BUILD_NUMBER | Codemagic build counter: $BUILD_NUMBER | Using: $NEW_BUILD_NUMBER"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD_NUMBER" ios/App/App/Info.plist
+          cat ios/App/App/Info.plist | grep -A1 CFBundleVersion
       - name: Build ipa for distribution
         script: |
           xcode-project build-ipa --workspace "ios/App/$XCODE_WORKSPACE" --scheme "$XCODE_SCHEME"
