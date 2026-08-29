@@ -37,6 +37,11 @@ workflows:
         script: keychain add-certificates
       - name: Set up code signing settings on Xcode project
         script: xcode-project use-profiles
+      - name: Increment build number
+        script: |
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$BUNDLE_ID" || echo 0)
+          cd ios/App
+          agvtool new-version -all $((LATEST_BUILD_NUMBER + 1))
       - name: Build ipa for distribution
         script: |
           xcode-project build-ipa --workspace "ios/App/$XCODE_WORKSPACE" --scheme "$XCODE_SCHEME"
@@ -47,3 +52,4 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+
