@@ -25,6 +25,10 @@ workflows:
           fi
       - name: Sync Capacitor
         script: npx cap sync ios
+      - name: Set export compliance flag
+        script: |
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" ios/App/App/Info.plist || \
+          /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" ios/App/App/Info.plist
       - name: Install CocoaPods dependencies
         script: |
           cd ios/App && pod install
