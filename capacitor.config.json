@@ -1,9 +1,10 @@
 {
-    "appId": "com.miguelrios.financeflow",
-    "appName": "FinanceFlow",
-    "webDir": "www",
-    "bundledWebRuntime": false,
-    "ios": {
-          "contentInset": "automatic"
-    }
+  "appId": "com.miguelrios.financeflow",
+  "appName": "FinanceFlow",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "ios": {
+    "contentInset": "never"
+  }
 }
+
