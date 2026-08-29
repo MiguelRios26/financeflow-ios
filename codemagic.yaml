@@ -40,8 +40,10 @@ workflows:
       - name: Increment build number
         script: |
           LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$BUNDLE_ID" || echo 0)
-          cd ios/App
-          agvtool new-version -all $((LATEST_BUILD_NUMBER + 1))
+          NEW_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
+          echo "Setting build number to $NEW_BUILD_NUMBER"
+          PLIST=$(find ios/App -name "Info.plist" -path "*/App/*" | head -1)
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD_NUMBER" "$PLIST"
       - name: Build ipa for distribution
         script: |
           xcode-project build-ipa --workspace "ios/App/$XCODE_WORKSPACE" --scheme "$XCODE_SCHEME"
