@@ -2637,10 +2637,14 @@ async function startVoiceCommand() {
       }
       _voiceBusy = false;
       try {
-        const pluginNames = (window.Capacitor && window.Capacitor.Plugins) ? Object.keys(window.Capacitor.Plugins).join(', ') : '(Capacitor indisponivel)';
-        toast('Plugin de voz nativo nao encontrado. Plugins: ' + pluginNames, 'e', 9000);
+        const plat = (window.Capacitor && window.Capacitor.getPlatform) ? window.Capacitor.getPlatform() : '?';
+        const isNative = window.Capacitor && window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : '?';
+        const pluginNames = (window.Capacitor && window.Capacitor.Plugins) ? Object.keys(window.Capacitor.Plugins).join(', ') : '(sem Capacitor.Plugins)';
+        setTimeout(() => {
+          window.alert('DIAGNOSTICO VOZ\nplataforma: ' + plat + '\nisNative: ' + isNative + '\nplugins (' + (window.Capacitor && window.Capacitor.Plugins ? Object.keys(window.Capacitor.Plugins).length : 0) + '): ' + pluginNames);
+        }, 300);
       } catch (diagErr) {
-        toast('Erro no diagnostico de plugins: ' + diagErr.message, 'e', 6000);
+        setTimeout(() => { window.alert('Erro no diagnostico: ' + diagErr.message); }, 300);
       }
       _openVoiceDictationPrompt();
       return;
