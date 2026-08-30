@@ -321,14 +321,15 @@ body{min-height:100vh;min-height:-webkit-fill-available;touch-action:pan-y;-webk
   .sidebar{
     position:fixed;
     bottom:0; left:0; right:0;
-    width:100%; height:56px; min-height:56px;
+    width:100%; height:auto; min-height:66px;
     flex-direction:row;
     border-right:none;
     border-top:1px solid var(--brd);
-    overflow:hidden;
+    overflow:visible;
     padding-bottom:var(--safe-bot);
     background:var(--bg2);
     z-index:1000;
+    box-sizing:border-box;
   }
   .slogo{display:none;}
   .snav{
@@ -395,7 +396,7 @@ body{min-height:100vh;min-height:-webkit-fill-available;touch-action:pan-y;-webk
   }
   .page.on{
     padding:12px 14px !important;
-    padding-bottom:80px !important;
+    padding-bottom:calc(96px + var(--safe-bot)) !important;
   }
 
   /* Grids stack on mobile */
@@ -515,7 +516,7 @@ body{min-height:100vh;min-height:-webkit-fill-available;touch-action:pan-y;-webk
 /* ── Floating action button (mobile) ── */
 #fab{
   display:none;
-  position:fixed;bottom:70px;right:16px;
+  position:fixed;bottom:calc(78px + var(--safe-bot));right:16px;
   width:52px;height:52px;border-radius:50%;
   background:var(--acc);border:none;cursor:pointer;
   align-items:center;justify-content:center;
@@ -528,7 +529,7 @@ body{min-height:100vh;min-height:-webkit-fill-available;touch-action:pan-y;-webk
 /* Voice command floating button (mobile) */
 #voice-fab{
   display:none;
-  position:fixed;bottom:calc(70px + var(--safe-bot));right:78px;
+  position:fixed;bottom:calc(78px + var(--safe-bot));right:78px;
   width:52px;height:52px;border-radius:50%;
   background:linear-gradient(135deg,#1e6fa8,#0d3f66);border:none;cursor:pointer;
   align-items:center;justify-content:center;
@@ -1926,7 +1927,7 @@ const toastCl = {s:'var(--green)',e:'var(--red)',i:'var(--blue)',w:'var(--amber)
 function toast(msg, type='i', dur=3200) {
   if (isMobile && isMobile()) {
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;bottom:calc(66px + var(--safe-bot));left:50%;transform:translateX(-50%);
+    el.style.cssText = `position:fixed;bottom:calc(78px + var(--safe-bot));left:50%;transform:translateX(-50%);
       background:var(--bg3);border:1px solid var(--brd2);border-left:2px solid var(--${
         {s:'green',e:'red',i:'blue',w:'amber'}[type]||'blue'});
       border-radius:var(--r);padding:10px 16px;font-size:12px;font-weight:500;
@@ -2593,21 +2594,54 @@ async function startVoiceCommand() {
       // (causa raiz do erro "Ongoing speech recognition")
       await SR.stop().catch(()=>{});
       await SR.removeAllListeners?.().catch(()=>{});
+
+      // No iOS a Promise de start() nem sempre resolve sozinha com o texto final —
+      // por isso escutamos os resultados parciais e forçamos um stop() após um tempo,
+      // usando o último parcial capturado como resultado se necessário.
+      let lastPartial = '';
+      let finished = false;
+      let partialHandle = null;
+      try {
+        partialHandle = await SR.addListener('partialResults', (data) => {
+          if (data && data.matches && data.matches.length) lastPartial = data.matches[0];
+        });
+      } catch (e) {}
+
+      const cleanupListener = async () => {
+        if (partialHandle && partialHandle.remove) await partialHandle.remove().catch(()=>{});
+      };
+
+      const autoStopTimer = setTimeout(() => {
+        SR.stop().catch(()=>{});
+      }, 6000);
+
+      const finalize = async (matches) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(autoStopTimer);
+        await cleanupListener();
+        _setVoiceListening(false);
+        _voiceBusy = false;
+        const texto = (matches && matches.length ? matches[0] : null) || lastPartial || null;
+        if (texto) processVoiceInput(texto);
+        else toast('Não entendi. Tente novamente.', 'e', 4000);
+      };
+
       _setVoiceListening(true);
       toast('🎤 Ouvindo... diga, por exemplo: "Gastei 50 reais no mercado"', 'i', 4000);
       SR.start({
         language: 'pt-BR',
         maxResults: 1,
         prompt: 'Diga o gasto ou receita',
-        partialResults: false,
+        partialResults: true,
         popup: false
       }).then(result => {
-        _setVoiceListening(false);
-        _voiceBusy = false;
-        const texto = result && result.matches && result.matches.length ? result.matches[0] : null;
-        if (texto) processVoiceInput(texto);
-        else toast('Não entendi. Tente novamente.', 'e', 4000);
-      }).catch(err => {
+        finalize(result && result.matches);
+      }).catch(async err => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(autoStopTimer);
+        await cleanupListener();
         _setVoiceListening(false);
         _voiceBusy = false;
         toast('Erro no reconhecimento de voz: ' + (err && err.message ? err.message : err), 'e', 5000);
@@ -5181,3 +5215,4 @@ document.addEventListener('DOMContentLoaded', fixContentHeight);
 </body>
 </html>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+
