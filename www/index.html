@@ -525,6 +525,21 @@ body{min-height:100vh;min-height:-webkit-fill-available;touch-action:pan-y;-webk
 #fab:active{transform:scale(.94);}
 @media(max-width:767px){#fab{display:flex;}}
 
+/* Voice command floating button (mobile) */
+#voice-fab{
+  display:none;
+  position:fixed;bottom:calc(70px + var(--safe-bot));right:78px;
+  width:52px;height:52px;border-radius:50%;
+  background:linear-gradient(135deg,#1e6fa8,#0d3f66);border:none;cursor:pointer;
+  align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(30,111,168,.5);
+  z-index:200;transition:.2s;font-size:22px;
+}
+#voice-fab:active{transform:scale(.94);}
+#voice-fab.listening{animation:voiceFabPulse 1.2s infinite;}
+@keyframes voiceFabPulse{0%{box-shadow:0 0 0 0 rgba(30,111,168,.6);}70%{box-shadow:0 0 0 14px rgba(30,111,168,0);}100%{box-shadow:0 0 0 0 rgba(30,111,168,0);}}
+@media(max-width:767px){#voice-fab{display:flex;}}
+
 /* ── Smooth scroll on mobile ── */
 .page.on{scroll-behavior:smooth;}
 
@@ -552,6 +567,7 @@ button, .btn, .bto, .lg-tab, .sni, .mclose, [onclick] {
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 </head>
 <body>
+<script src="capacitor.js"></script>
 <div id="toasts"></div>
 
 <!-- PWA Install Banner -->
@@ -569,6 +585,9 @@ button, .btn, .bto, .lg-tab, .sni, .mclose, [onclick] {
 <button id="fab" onclick="tbAct()" title="Nova transação">
   <i class="ti ti-plus" style="font-size:22px;color:#fff"></i>
 </button>
+
+<!-- Voice command Floating Button (mobile) -->
+<button id="voice-fab" onclick="startVoiceCommand()" title="Registrar por voz">🎤</button>
 
 <!-- ══ LOGIN ══════════════════════════════════════════════ -->
 <div id="login-screen">
@@ -2540,6 +2559,94 @@ function processVoiceInput(text) {
   }
 }
 window.processVoiceInput = processVoiceInput;
+
+// ── Comando de voz via microfone dentro do app (iOS/Android nativo + navegadores compatíveis) ──
+let _voiceFabEl = null;
+function _voiceFab() { if (!_voiceFabEl) _voiceFabEl = document.getElementById('voice-fab'); return _voiceFabEl; }
+function _setVoiceListening(on) {
+  const el = _voiceFab();
+  if (el) el.classList.toggle('listening', !!on);
+}
+
+async function startVoiceCommand() {
+  try {
+    // 1) App nativo (Capacitor iOS/Android) com plugin de reconhecimento de voz
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition) {
+      const SR = window.Capacitor.Plugins.SpeechRecognition;
+      const avail = await SR.available().catch(()=>({available:false}));
+      if (!avail || !avail.available) {
+        toast('Reconhecimento de voz não disponível neste aparelho.', 'e', 5000);
+        return;
+      }
+      const perm = await SR.requestPermissions().catch(()=>null);
+      const micOk = !perm || perm.speechRecognition === 'granted' || perm.microphone === 'granted' || perm === 'granted';
+      if (perm && perm.speechRecognition && perm.speechRecognition !== 'granted') {
+        toast('Autorize o microfone e o reconhecimento de voz nos ajustes do iPhone para usar esse recurso.', 'e', 6000);
+        return;
+      }
+      _setVoiceListening(true);
+      toast('🎤 Ouvindo... diga, por exemplo: "Gastei 50 reais no mercado"', 'i', 4000);
+      SR.start({
+        language: 'pt-BR',
+        maxResults: 1,
+        prompt: 'Diga o gasto ou receita',
+        partialResults: false,
+        popup: false
+      }).then(result => {
+        _setVoiceListening(false);
+        const texto = result && result.matches && result.matches.length ? result.matches[0] : null;
+        if (texto) processVoiceInput(texto);
+        else toast('Não entendi. Tente novamente.', 'e', 4000);
+      }).catch(err => {
+        _setVoiceListening(false);
+        toast('Erro no reconhecimento de voz: ' + (err && err.message ? err.message : err), 'e', 5000);
+      });
+      return;
+    }
+
+    // 2) Navegador com Web Speech API (fallback para web/desktop)
+    const WebSR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (WebSR) {
+      const rec = new WebSR();
+      rec.lang = 'pt-BR';
+      rec.maxAlternatives = 1;
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.onstart = () => { _setVoiceListening(true); toast('🎤 Ouvindo... diga, por exemplo: "Gastei 50 reais no mercado"', 'i', 4000); };
+      rec.onresult = (e) => { const texto = e.results[0][0].transcript; processVoiceInput(texto); };
+      rec.onerror = () => { toast('Erro no reconhecimento de voz. Tente novamente.', 'e', 4000); };
+      rec.onend = () => { _setVoiceListening(false); };
+      rec.start();
+      return;
+    }
+
+    toast('Comando de voz não é suportado neste dispositivo/navegador.', 'e', 5000);
+  } catch (e) {
+    _setVoiceListening(false);
+    toast('Erro ao iniciar comando de voz: ' + e.message, 'e', 5000);
+  }
+}
+window.startVoiceCommand = startVoiceCommand;
+
+// ── Abrir direto no comando de voz quando o app é aberto pelo Widget (financeflow://voice) ──
+function _tryAutoVoiceFromDeepLink(url, attempts) {
+  attempts = attempts || 0;
+  if (!url || !/voice/i.test(url)) return;
+  const appVisible = document.getElementById('app') && document.getElementById('app').style.display !== 'none';
+  const dbReady = typeof DB !== 'undefined' && DB && DB.transacoes;
+  if (appVisible && dbReady) {
+    setTimeout(() => { if (window.startVoiceCommand) window.startVoiceCommand(); }, 400);
+  } else if (attempts < 25) {
+    setTimeout(() => _tryAutoVoiceFromDeepLink(url, attempts + 1), 300);
+  }
+}
+(function setupVoiceDeepLink() {
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+    const CapApp = window.Capacitor.Plugins.App;
+    CapApp.addListener('appUrlOpen', (data) => { _tryAutoVoiceFromDeepLink(data && data.url); });
+    CapApp.getLaunchUrl().then((res) => { if (res && res.url) _tryAutoVoiceFromDeepLink(res.url); }).catch(() => {});
+  }
+})();
 
 function renderTxPage() {
   let txs=[...DB.transacoes];
