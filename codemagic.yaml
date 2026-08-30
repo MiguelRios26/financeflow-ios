@@ -29,6 +29,12 @@ workflows:
         script: |
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" ios/App/App/Info.plist || \
           /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" ios/App/App/Info.plist
+      - name: Add microphone and speech recognition permissions
+        script: |
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Precisamos do microfone para registrar transações por comando de voz.'" ios/App/App/Info.plist || \
+          /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription Precisamos do microfone para registrar transações por comando de voz." ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string 'Usamos reconhecimento de voz para transformar sua fala em lançamentos financeiros.'" ios/App/App/Info.plist || \
+          /usr/libexec/PlistBuddy -c "Set :NSSpeechRecognitionUsageDescription Usamos reconhecimento de voz para transformar sua fala em lançamentos financeiros." ios/App/App/Info.plist
       - name: Install CocoaPods dependencies
         script: |
           cd ios/App && pod install
