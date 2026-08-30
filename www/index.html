@@ -2568,7 +2568,10 @@ function _setVoiceListening(on) {
   if (el) el.classList.toggle('listening', !!on);
 }
 
+let _voiceBusy = false;
 async function startVoiceCommand() {
+  if (_voiceBusy) return;
+  _voiceBusy = true;
   try {
     // 1) App nativo (Capacitor iOS/Android) com plugin de reconhecimento de voz
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition) {
@@ -2576,14 +2579,20 @@ async function startVoiceCommand() {
       const avail = await SR.available().catch(()=>({available:false}));
       if (!avail || !avail.available) {
         toast('Reconhecimento de voz não disponível neste aparelho.', 'e', 5000);
+        _voiceBusy = false;
         return;
       }
       const perm = await SR.requestPermissions().catch(()=>null);
       const micOk = !perm || perm.speechRecognition === 'granted' || perm.microphone === 'granted' || perm === 'granted';
       if (perm && perm.speechRecognition && perm.speechRecognition !== 'granted') {
         toast('Autorize o microfone e o reconhecimento de voz nos ajustes do iPhone para usar esse recurso.', 'e', 6000);
+        _voiceBusy = false;
         return;
       }
+      // Limpa qualquer sessão de reconhecimento presa de uma tentativa anterior
+      // (causa raiz do erro "Ongoing speech recognition")
+      await SR.stop().catch(()=>{});
+      await SR.removeAllListeners?.().catch(()=>{});
       _setVoiceListening(true);
       toast('🎤 Ouvindo... diga, por exemplo: "Gastei 50 reais no mercado"', 'i', 4000);
       SR.start({
@@ -2594,11 +2603,13 @@ async function startVoiceCommand() {
         popup: false
       }).then(result => {
         _setVoiceListening(false);
+        _voiceBusy = false;
         const texto = result && result.matches && result.matches.length ? result.matches[0] : null;
         if (texto) processVoiceInput(texto);
         else toast('Não entendi. Tente novamente.', 'e', 4000);
       }).catch(err => {
         _setVoiceListening(false);
+        _voiceBusy = false;
         toast('Erro no reconhecimento de voz: ' + (err && err.message ? err.message : err), 'e', 5000);
       });
       return;
@@ -2615,14 +2626,16 @@ async function startVoiceCommand() {
       rec.onstart = () => { _setVoiceListening(true); toast('🎤 Ouvindo... diga, por exemplo: "Gastei 50 reais no mercado"', 'i', 4000); };
       rec.onresult = (e) => { const texto = e.results[0][0].transcript; processVoiceInput(texto); };
       rec.onerror = () => { toast('Erro no reconhecimento de voz. Tente novamente.', 'e', 4000); };
-      rec.onend = () => { _setVoiceListening(false); };
+      rec.onend = () => { _setVoiceListening(false); _voiceBusy = false; };
       rec.start();
       return;
     }
 
+    _voiceBusy = false;
     toast('Comando de voz não é suportado neste dispositivo/navegador.', 'e', 5000);
   } catch (e) {
     _setVoiceListening(false);
+    _voiceBusy = false;
     toast('Erro ao iniciar comando de voz: ' + e.message, 'e', 5000);
   }
 }
