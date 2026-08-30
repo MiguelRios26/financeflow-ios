@@ -2636,6 +2636,12 @@ async function startVoiceCommand() {
         return;
       }
       _voiceBusy = false;
+      try {
+        const pluginNames = (window.Capacitor && window.Capacitor.Plugins) ? Object.keys(window.Capacitor.Plugins).join(', ') : '(Capacitor indisponivel)';
+        toast('Plugin de voz nativo nao encontrado. Plugins: ' + pluginNames, 'e', 9000);
+      } catch (diagErr) {
+        toast('Erro no diagnostico de plugins: ' + diagErr.message, 'e', 6000);
+      }
       _openVoiceDictationPrompt();
       return;
     }
