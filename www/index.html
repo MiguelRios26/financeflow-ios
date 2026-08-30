@@ -2593,55 +2593,24 @@ async function startVoiceCommand() {
       // Limpa qualquer sessão de reconhecimento presa de uma tentativa anterior
       // (causa raiz do erro "Ongoing speech recognition")
       await SR.stop().catch(()=>{});
-      await SR.removeAllListeners?.().catch(()=>{});
 
-      // No iOS a Promise de start() nem sempre resolve sozinha com o texto final —
-      // por isso escutamos os resultados parciais e forçamos um stop() após um tempo,
-      // usando o último parcial capturado como resultado se necessário.
-      let lastPartial = '';
-      let finished = false;
-      let partialHandle = null;
-      try {
-        partialHandle = await SR.addListener('partialResults', (data) => {
-          if (data && data.matches && data.matches.length) lastPartial = data.matches[0];
-        });
-      } catch (e) {}
-
-      const cleanupListener = async () => {
-        if (partialHandle && partialHandle.remove) await partialHandle.remove().catch(()=>{});
-      };
-
-      const autoStopTimer = setTimeout(() => {
-        SR.stop().catch(()=>{});
-      }, 6000);
-
-      const finalize = async (matches) => {
-        if (finished) return;
-        finished = true;
-        clearTimeout(autoStopTimer);
-        await cleanupListener();
-        _setVoiceListening(false);
-        _voiceBusy = false;
-        const texto = (matches && matches.length ? matches[0] : null) || lastPartial || null;
-        if (texto) processVoiceInput(texto);
-        else toast('Não entendi. Tente novamente.', 'e', 4000);
-      };
-
+      // No iOS, usar o popup nativo de ditado da Apple é o caminho mais estável:
+      // ele cuida da sessão de áudio e devolve o texto reconhecido de forma confiável
+      // (a versão "silenciosa" com resultados parciais causava travamento/fechamento do app).
       _setVoiceListening(true);
-      toast('🎤 Ouvindo... diga, por exemplo: "Gastei 50 reais no mercado"', 'i', 4000);
       SR.start({
         language: 'pt-BR',
         maxResults: 1,
         prompt: 'Diga o gasto ou receita',
-        partialResults: true,
-        popup: false
+        partialResults: false,
+        popup: true
       }).then(result => {
-        finalize(result && result.matches);
-      }).catch(async err => {
-        if (finished) return;
-        finished = true;
-        clearTimeout(autoStopTimer);
-        await cleanupListener();
+        _setVoiceListening(false);
+        _voiceBusy = false;
+        const texto = result && result.matches && result.matches.length ? result.matches[0] : null;
+        if (texto) processVoiceInput(texto);
+        else toast('Não entendi. Tente novamente.', 'e', 4000);
+      }).catch(err => {
         _setVoiceListening(false);
         _voiceBusy = false;
         toast('Erro no reconhecimento de voz: ' + (err && err.message ? err.message : err), 'e', 5000);
@@ -5215,4 +5184,5 @@ document.addEventListener('DOMContentLoaded', fixContentHeight);
 </body>
 </html>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+
 
