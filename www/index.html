@@ -2614,8 +2614,27 @@ async function startVoiceCommand() {
   try {
     const platform = window.Capacitor && window.Capacitor.getPlatform ? window.Capacitor.getPlatform() : 'web';
 
-    // No iOS usamos o ditado nativo do teclado (ver _openVoiceDictationPrompt acima).
+    // No iOS usamos o plugin nativo proprio VoiceCapture (1 toque, sem interacao extra).
+    // Se por algum motivo ele nao estiver disponivel, caimos no ditado do teclado.
     if (platform === 'ios') {
+      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VoiceCapture) {
+        const VC = window.Capacitor.Plugins.VoiceCapture;
+        _setVoiceListening(true);
+        toast('🎤 Ouvindo... diga, por exemplo: "Gastei 50 reais no mercado"', 'i', 4000);
+        VC.startListening().then(result => {
+          _setVoiceListening(false);
+          _voiceBusy = false;
+          const texto = result && result.text ? String(result.text).trim() : '';
+          if (texto) processVoiceInput(texto);
+          else toast('Não entendi. Tente novamente.', 'e', 4000);
+        }).catch(err => {
+          _setVoiceListening(false);
+          _voiceBusy = false;
+          toast('Erro no microfone: ' + (err && err.message ? err.message : err), 'e', 4000);
+          _openVoiceDictationPrompt();
+        });
+        return;
+      }
       _voiceBusy = false;
       _openVoiceDictationPrompt();
       return;
