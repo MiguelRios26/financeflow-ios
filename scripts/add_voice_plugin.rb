@@ -53,3 +53,26 @@ file_types.keys.each do |filename|
 end
 
 puts "VoiceCapturePlugin adicionado e verificado com sucesso no target App."
+
+# ── Registra o plugin no packageClassList do capacitor.config.json ──
+# O Capacitor 6 no iOS so registra em tempo de execucao os plugins nativos que
+# estao listados no array "packageClassList" dentro do capacitor.config.json
+# empacotado no app (CapacitorBridge.swift le esse arquivo e usa NSClassFromString
+# em cada nome da lista). Esse array e preenchido automaticamente pelo "cap sync"
+# apenas com plugins que vem de pacotes npm — como o nosso VoiceCapturePlugin nao
+# e um pacote npm, ele nunca entra nessa lista sozinho, mesmo compilando certinho.
+# Por isso precisamos adiciona-lo manualmente aqui, depois do sync.
+require 'json'
+
+config_path = 'ios/App/App/capacitor.config.json'
+if File.exist?(config_path)
+  config = JSON.parse(File.read(config_path))
+  list = config['packageClassList'] || []
+  list << 'VoiceCapturePlugin' unless list.include?('VoiceCapturePlugin')
+  config['packageClassList'] = list
+  File.write(config_path, JSON.pretty_generate(config))
+  puts "packageClassList atualizado: #{list}"
+else
+  puts "AVISO: #{config_path} nao encontrado, pulando atualizacao do packageClassList"
+end
+
