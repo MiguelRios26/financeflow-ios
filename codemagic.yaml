@@ -30,6 +30,8 @@ workflows:
         script: gem install xcodeproj --no-document
       - name: Add Widget Extension target
         script: ruby scripts/add_widget_target.rb
+      - name: Add native VoiceCapture plugin
+        script: ruby scripts/add_voice_plugin.rb
       - name: Set export compliance flag
         script: |
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" ios/App/App/Info.plist || \
