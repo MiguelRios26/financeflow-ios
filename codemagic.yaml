@@ -10,6 +10,7 @@ workflows:
         - certificate_signing
       vars:
         BUNDLE_ID: "com.miguelrios.financeflow"
+        BUNDLE_ID_WIDGET: "com.miguelrios.financeflow.widget"
         XCODE_WORKSPACE: "App.xcworkspace"
         XCODE_SCHEME: "App"
       node: latest
@@ -25,6 +26,10 @@ workflows:
           fi
       - name: Sync Capacitor
         script: npx cap sync ios
+      - name: Install xcodeproj gem
+        script: gem install xcodeproj --no-document
+      - name: Add Widget Extension target
+        script: ruby scripts/add_widget_target.rb
       - name: Set export compliance flag
         script: |
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" ios/App/App/Info.plist || \
@@ -35,6 +40,12 @@ workflows:
           /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription Precisamos do microfone para registrar transações por comando de voz." ios/App/App/Info.plist
           /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string 'Usamos reconhecimento de voz para transformar sua fala em lançamentos financeiros.'" ios/App/App/Info.plist || \
           /usr/libexec/PlistBuddy -c "Set :NSSpeechRecognitionUsageDescription Usamos reconhecimento de voz para transformar sua fala em lançamentos financeiros." ios/App/App/Info.plist
+      - name: Add URL scheme for Widget deep link
+        script: |
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" ios/App/App/Info.plist || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" ios/App/App/Info.plist || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" ios/App/App/Info.plist || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string financeflow" ios/App/App/Info.plist || true
       - name: Install CocoaPods dependencies
         script: |
           cd ios/App && pod install
@@ -43,6 +54,7 @@ workflows:
       - name: Fetch signing files
         script: |
           app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          app-store-connect fetch-signing-files "$BUNDLE_ID_WIDGET" --type IOS_APP_STORE --create
       - name: Set up signing certificate
         script: keychain add-certificates
       - name: Set up code signing settings on Xcode project
@@ -58,6 +70,7 @@ workflows:
           fi
           echo "Latest App Store build: $LATEST_BUILD_NUMBER | Codemagic build counter: $BUILD_NUMBER | Using: $NEW_BUILD_NUMBER"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD_NUMBER" ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD_NUMBER" ios/App/FinanceFlowWidgetExtension/Info.plist
           cat ios/App/App/Info.plist | grep -A1 CFBundleVersion
       - name: Build ipa for distribution
         script: |
