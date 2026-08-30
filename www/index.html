@@ -2570,11 +2570,58 @@ function _setVoiceListening(on) {
 }
 
 let _voiceBusy = false;
+
+// ── iOS: ditado nativo do teclado da Apple (mais confiável que o plugin) ──
+// O plugin @capacitor-community/speech-recognition se mostrou instável no iOS
+// (trava sem nunca capturar áudio, ou fecha o app). Em vez disso, abrimos um
+// campo de texto e deixamos o próprio teclado do iPhone cuidar do ditado —
+// é a mesma tecnologia de voz da Apple, só que pelo caminho oficial e estável.
+function _openVoiceDictationPrompt() {
+  const old = document.getElementById('voice-dictation-overlay');
+  if (old) old.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'voice-dictation-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:flex-end;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:var(--bg2,#12161c);width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:20px 18px calc(20px + var(--safe-bot,0px));box-sizing:border-box;">
+      <div style="font-size:14px;font-weight:600;color:var(--tx,#fff);margin-bottom:6px;">🎤 Toque no microfone do teclado e fale</div>
+      <div style="font-size:12px;color:var(--tx3,#9aa);margin-bottom:12px;">Ex: "Gastei 50 reais no mercado". Também pode digitar.</div>
+      <input id="voice-dictation-input" type="text" placeholder="Gastei 50 reais no mercado"
+        style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid var(--brd2,#2a3038);background:var(--bg3,#1a1f26);color:var(--tx,#fff);font-size:16px;margin-bottom:14px;">
+      <div style="display:flex;gap:10px;">
+        <button id="voice-dictation-cancel" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--bg3,#232830);color:var(--tx2,#ccc);font-size:14px;font-weight:600;">Cancelar</button>
+        <button id="voice-dictation-ok" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--acc,#1e6fa8);color:#fff;font-size:14px;font-weight:600;">Confirmar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const input = document.getElementById('voice-dictation-input');
+  const cleanup = () => { overlay.remove(); };
+  document.getElementById('voice-dictation-cancel').onclick = cleanup;
+  document.getElementById('voice-dictation-ok').onclick = () => {
+    const texto = input.value.trim();
+    cleanup();
+    if (texto) processVoiceInput(texto);
+    else toast('Nada foi dito ou digitado.', 'e', 3000);
+  };
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(); });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { document.getElementById('voice-dictation-ok').click(); } });
+  setTimeout(() => input.focus(), 250);
+}
+
 async function startVoiceCommand() {
   if (_voiceBusy) return;
   _voiceBusy = true;
   try {
-    // 1) App nativo (Capacitor iOS/Android) com plugin de reconhecimento de voz
+    const platform = window.Capacitor && window.Capacitor.getPlatform ? window.Capacitor.getPlatform() : 'web';
+
+    // No iOS usamos o ditado nativo do teclado (ver _openVoiceDictationPrompt acima).
+    if (platform === 'ios') {
+      _voiceBusy = false;
+      _openVoiceDictationPrompt();
+      return;
+    }
+
+    // 1) App nativo (Android) com plugin de reconhecimento de voz
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition) {
       const SR = window.Capacitor.Plugins.SpeechRecognition;
       const avail = await SR.available().catch(()=>({available:false}));
@@ -2586,24 +2633,21 @@ async function startVoiceCommand() {
       const perm = await SR.requestPermissions().catch(()=>null);
       const micOk = !perm || perm.speechRecognition === 'granted' || perm.microphone === 'granted' || perm === 'granted';
       if (perm && perm.speechRecognition && perm.speechRecognition !== 'granted') {
-        toast('Autorize o microfone e o reconhecimento de voz nos ajustes do iPhone para usar esse recurso.', 'e', 6000);
+        toast('Autorize o microfone e o reconhecimento de voz nos ajustes do aparelho para usar esse recurso.', 'e', 6000);
         _voiceBusy = false;
         return;
       }
       // Limpa qualquer sessão de reconhecimento presa de uma tentativa anterior
       // (causa raiz do erro "Ongoing speech recognition")
       await SR.stop().catch(()=>{});
-
-      // No iOS, usar o popup nativo de ditado da Apple é o caminho mais estável:
-      // ele cuida da sessão de áudio e devolve o texto reconhecido de forma confiável
-      // (a versão "silenciosa" com resultados parciais causava travamento/fechamento do app).
       _setVoiceListening(true);
+      toast('🎤 Ouvindo... diga, por exemplo: "Gastei 50 reais no mercado"', 'i', 4000);
       SR.start({
         language: 'pt-BR',
         maxResults: 1,
         prompt: 'Diga o gasto ou receita',
         partialResults: false,
-        popup: true
+        popup: false
       }).then(result => {
         _setVoiceListening(false);
         _voiceBusy = false;
@@ -5184,5 +5228,6 @@ document.addEventListener('DOMContentLoaded', fixContentHeight);
 </body>
 </html>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+
 
 
