@@ -19,7 +19,6 @@ widget_bundle_id = 'com.miguelrios.financeflow.widget'
 if project.targets.find { |t| t.name == widget_target_name }
   puts "Target #{widget_target_name} ja existe, pulando criacao."
 else
-  # Copia os arquivos fonte da extensao para dentro da pasta ios/App
   src_dir = File.join(Dir.pwd, 'ios-extra', 'FinanceFlowWidgetExtension')
   dst_dir = File.join(Dir.pwd, 'ios', 'App', widget_target_name)
   FileUtils.mkdir_p(dst_dir)
@@ -29,7 +28,9 @@ else
   widget_target = project.new_target(:app_extension, widget_target_name, :ios, '16.0')
 
   widget_target.build_configurations.each do |config|
+    config.build_settings['PRODUCT_NAME'] = '$(TARGET_NAME)'
     config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = widget_bundle_id
+    config.build_settings['GENERATE_INFOPLIST_FILE'] = 'NO'
     config.build_settings['INFOPLIST_FILE'] = "#{widget_target_name}/Info.plist"
     config.build_settings['SWIFT_VERSION'] = '5.0'
     config.build_settings['TARGETED_DEVICE_FAMILY'] = '1,2'
@@ -54,7 +55,7 @@ else
     embed_phase = main_target.new_copy_files_build_phase('Embed Foundation Extensions')
     embed_phase.symbol_dst_subfolder_spec = :plug_ins
   end
-  embed_build_file = embed_phase.add_file_reference(widget_target.product_reference, true)
+  embed_build_file = embed_phase.add_file_reference(widget_target.product_reference)
   embed_build_file.settings = { 'ATTRIBUTES' => ['RemoveHeaderOnCopy'] }
 
   main_target.add_dependency(widget_target)
