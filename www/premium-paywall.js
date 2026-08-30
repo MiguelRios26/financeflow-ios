@@ -4,13 +4,13 @@
  * Módulo único, sem dependências externas (JS puro).
  *
  * COMO USAR:
- *   1. Ajuste BACKEND_URL abaixo para a URL pública do seu back-end
- *      (Netlify NÃO roda Node/Express — o back-end precisa estar hospedado
- *      em outro lugar: Render, Railway, Fly.io, um VPS, etc.)
- *   2. Inclua este arquivo no final do <body> do index.html:
- *        <script src="premium-paywall.js"></script>
- *   3. Pronto. O módulo se inicializa sozinho (roda no DOMContentLoaded,
- *      ou imediatamente se o DOM já estiver pronto).
+ * 1. Ajuste BACKEND_URL abaixo para a URL pública do seu back-end
+ *    (Netlify NÃO roda Node/Express — o back-end precisa estar hospedado
+ *    em outro lugar: Render, Railway, Fly.io, um VPS, etc.)
+ * 2. Inclua este arquivo no final do <body> do index.html:
+ *    <script src="premium-paywall.js"></script>
+ * 3. Pronto. O módulo se inicializa sozinho (roda no DOMContentLoaded,
+ *    ou imediatamente se o DOM já estiver pronto).
  * ==========================================================================*/
 (function () {
   'use strict';
@@ -20,10 +20,9 @@
   // onde o server.js estiver rodando (ex: https://financeflow-api.onrender.com)
   const BACKEND_URL = 'https://financeflow-backend-j0p2.onrender.com';
 
-  // Link fixo do plano de assinatura criado direto no painel do Mercado
-  // Pago (Cobranças > Planos de assinatura). Usar esse link pronto evita
-  // o bug do checkout dinâmico (botão "Confirmar" que não liberava).
-  const PLANO_ASSINATURA_URL = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=49d69963b83948458d38a539960eff44';
+  // Preço exibido no modal (pagamento único — cobrado via Checkout Pro,
+  // preferência criada dinamicamente pelo back-end em /api/criar-preferencia-mp).
+  const PRECO_PRO_TEXTO = 'R$ 24,99';
 
   // IDs internos de página (usados em goPage('investimentos') etc.) que são
   // exclusivos da versão PRO, e o nome amigável de cada um pro modal/cadeado.
@@ -208,16 +207,17 @@
       </h2>
       <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#c7c7c7;">
         <strong>${escapeHtml(recurso)}</strong> faz parte da versão
-        <strong>PRO</strong> do FinanceFlow. Assine por
-        <strong>R$ 29,90/mês</strong> e tenha acesso completo a
-        Investimentos, Metas e Educação Financeira.
+        <strong>PRO</strong> do FinanceFlow. Desbloqueie por
+        <strong>${PRECO_PRO_TEXTO}</strong> (pagamento único, sem mensalidade)
+        e tenha acesso completo a Investimentos, Metas e Educação Financeira
+        para sempre.
       </p>
       <button id="pro-btn-desbloquear" style="
         width:100%;padding:14px;border:none;border-radius:10px;
         background:#009ee3;color:#fff;font-size:15px;font-weight:700;
         cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
       ">
-        Assinar com Mercado Pago
+        Desbloquear com Mercado Pago
       </button>
       <button id="pro-btn-fechar" style="
         margin-top:12px;width:100%;padding:10px;border:none;background:transparent;
@@ -251,7 +251,7 @@
   // ============================================================================
   // PASSO 2 — Disparo do checkout (Front-end → Back-end)
   // ============================================================================
-  function iniciarPagamentoMercadoPago() {
+  async function iniciarPagamentoMercadoPago() {
     let email = localStorage.getItem('user_email');
 
     if (!email) {
@@ -263,9 +263,34 @@
       localStorage.setItem('user_email', email);
     }
 
-    // Vai direto para o link fixo do plano de assinatura (criado no painel
-    // do Mercado Pago), em vez de gerar um checkout dinâmico pela API.
-    window.location.href = PLANO_ASSINATURA_URL;
+    const botao = document.getElementById('pro-btn-desbloquear');
+    const textoOriginal = botao ? botao.textContent : null;
+    if (botao) {
+      botao.disabled = true;
+      botao.textContent = 'Gerando pagamento...';
+    }
+
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/criar-preferencia-mp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok || !data.init_point) {
+        throw new Error(data.erro || 'Não foi possível gerar o pagamento.');
+      }
+
+      window.location.href = data.init_point;
+    } catch (err) {
+      console.error('[FinanceFlow PRO] erro ao criar pagamento:', err);
+      alert('Não foi possível iniciar o pagamento agora. Tente novamente em instantes.');
+      if (botao) {
+        botao.disabled = false;
+        botao.textContent = textoOriginal;
+      }
+    }
   }
 
   // ============================================================================
@@ -360,10 +385,8 @@
     return false;
   }
 
-  // Como agora o checkout é um link fixo do painel do Mercado Pago (não
-  // gerado pela nossa API), nem sempre ele volta com "?status=sucesso" na
-  // URL. Essa checagem roda toda vez que o app abre, pra pegar o caso de
-  // alguém que pagou, fechou o app antes de voltar, e reabriu depois.
+  // Roda toda vez que o app abre, pra pegar o caso de alguém que pagou,
+  // fechou o app antes de voltar (sem "?status=sucesso" na URL), e reabriu.
   async function verificarProAoAbrir() {
     if (ehPro()) return;
     const email = localStorage.getItem('user_email');
