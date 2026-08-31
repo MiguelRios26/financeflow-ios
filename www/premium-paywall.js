@@ -2,67 +2,29 @@
  * FinanceFlow PRO — Paywall + Checkout Pro (Mercado Pago)
  * ----------------------------------------------------------------------------
  * Módulo único, sem dependências externas (JS puro).
- *
- * COMO USAR:
- * 1. Ajuste BACKEND_URL abaixo para a URL pública do seu back-end
- *    (Netlify NÃO roda Node/Express — o back-end precisa estar hospedado
- *    em outro lugar: Render, Railway, Fly.io, um VPS, etc.)
- * 2. Inclua este arquivo no final do <body> do index.html:
- *    <script src="premium-paywall.js"></script>
- * 3. Pronto. O módulo se inicializa sozinho (roda no DOMContentLoaded,
- *    ou imediatamente se o DOM já estiver pronto).
  * ==========================================================================*/
 (function () {
   'use strict';
 
-  // ── CONFIGURAÇÃO ──────────────────────────────────────────────────────
-  // URL pública do back-end (Passo 3/4/5 do escopo). Troque para o domínio
-  // onde o server.js estiver rodando (ex: https://financeflow-api.onrender.com)
   const BACKEND_URL = 'https://financeflow-backend-j0p2.onrender.com';
+  const PLANO_ASSINATURA_URL = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=49d69963b83948458d38a539960eff44';
 
-  // Preço exibido no modal (pagamento único — cobrado via Checkout Pro,
-  // preferência criada dinamicamente pelo back-end em /api/criar-preferencia-mp).
-  const PRECO_PRO_TEXTO = 'R$ 24,99';
-
-  // IDs internos de página (usados em goPage('investimentos') etc.) que são
-  // exclusivos da versão PRO, e o nome amigável de cada um pro modal/cadeado.
-  // Se o FinanceFlow criar uma nova página PRO no futuro, só adicionar aqui.
   const PAGINAS_PRO = {
     investimentos: 'Investimentos',
     metas: 'Metas',
     livros: 'Educação Financeira',
   };
 
-  // Textos exatos (fallback visual, caso algum item novo não use goPage diretamente).
   const RECURSOS_PRO = Object.values(PAGINAS_PRO);
 
-  // ── ESTADO ────────────────────────────────────────────────────────────
-  // E-mail(s) do dono do app — sempre tem acesso PRO liberado, sem pagar.
-  // Qualquer outro e-mail segue o fluxo normal de pagamento.
   const EMAILS_LIBERADOS = ['miguelcombe99@gmail.com'];
 
-  const ehPro = () => {
-    try {
-      if (
-        typeof DB !== 'undefined' && DB && DB.user && DB.user.em &&
-        EMAILS_LIBERADOS.includes(String(DB.user.em).trim().toLowerCase())
-      ) {
-        return true;
-      }
-    } catch (e) {}
-    return localStorage.getItem('usuario_pro') === 'true';
-  };
+  // Investimentos, Metas e Educação Financeira são liberados pra todo mundo —
+  // não faz mais parte do que é vendido na assinatura (só o acesso ao app em
+  // si é pago). Por isso ehPro() sempre retorna true: nenhuma dessas telas
+  // fica bloqueada, e o modal de upgrade nunca aparece dentro do app.
+  const ehPro = () => true;
 
-  // ============================================================================
-  // PASSO 1 — Bloqueio funcional e visual
-  // ============================================================================
-  // MECANISMO PRINCIPAL: o FinanceFlow navega entre telas chamando a função
-  // global goPage('investimentos'|'metas'|'livros'|...), disparada via
-  // onclick inline em vários lugares (menu lateral, cards do dashboard, etc).
-  // Interceptar cliques em cada elemento individualmente é frágil (onclick
-  // inline dispara ANTES de qualquer addEventListener adicionado depois),
-  // então em vez disso envolvemos a própria goPage: não importa QUAL elemento
-  // foi clicado, todos passam por aqui.
   function envolverGoPage() {
     if (typeof window.goPage !== 'function' || window.goPage.__proWrapped) {
       return false;
@@ -80,7 +42,6 @@
     return true;
   }
 
-  // ── Cadeado visual (cosmético — o bloqueio de verdade é o goPage acima) ──
   function textoBate(el, alvo) {
     const textoProprio = Array.from(el.childNodes)
       .filter((n) => n.nodeType === Node.TEXT_NODE)
@@ -107,18 +68,14 @@
   }
 
   function encontrarItensProBloqueados() {
-    const encontrados = new Map(); // el -> recurso (evita duplicar o mesmo elemento)
+    const encontrados = new Map();
 
-    // 1) Seletor preciso: qualquer elemento cujo onclick chame goPage('id-pro')
-    //    — é assim que o menu lateral E os cards do dashboard disparam navegação.
     Object.keys(PAGINAS_PRO).forEach((id) => {
       document
         .querySelectorAll(`[onclick*="goPage('${id}')"], #sni-${id}`)
         .forEach((el) => encontrados.set(el, PAGINAS_PRO[id]));
     });
 
-    // 2) Fallback por texto exato, pra pegar itens que não usam goPage direto
-    //    (ex: markup diferente adicionado no futuro).
     document
       .querySelectorAll('button, a, li, [role="tab"], [role="button"], .tab, .nav-item, .card, .menu-item, .aba, .item, .sni')
       .forEach((el) => {
@@ -139,16 +96,12 @@
     el.dataset.proLocked = '1';
     el.dataset.proRecurso = recurso;
 
-    // Adiciona o 🔒 de forma elegante, sem quebrar o layout existente.
     const cadeado = document.createElement('span');
     cadeado.textContent = ' 🔒';
     cadeado.setAttribute('aria-hidden', 'true');
     cadeado.style.cssText = 'margin-left:4px;font-size:0.85em;opacity:.85;';
     el.appendChild(cadeado);
 
-    // Segunda camada de segurança (além do goPage): intercepta o clique em
-    // fase de captura. Não é o mecanismo principal (onclick inline pode
-    // disparar primeiro), mas ajuda em elementos que usam addEventListener.
     el.addEventListener(
       'click',
       function (e) {
@@ -160,19 +113,17 @@
         }
         abrirModalUpgrade(recurso);
       },
-      true // capture = true
+      true
     );
   }
 
   function bloquearRecursosPro() {
-    envolverGoPage(); // idempotente — só faz efeito na 1ª vez que goPage existir
-    if (ehPro()) return; // usuário PRO: não bloqueia nada
+    envolverGoPage();
+    if (ehPro()) return;
     const itens = encontrarItensProBloqueados();
     itens.forEach(({ el, recurso }) => aplicarCadeado(el, recurso));
   }
 
-  // Observa mudanças no DOM (a SPA troca de tela sem recarregar a página),
-  // e reaplica o bloqueio nos elementos novos que forem renderizados.
   function observarNovasTelas() {
     const observer = new MutationObserver(() => {
       if (!ehPro()) bloquearRecursosPro();
@@ -180,9 +131,8 @@
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
-  // ── Modal de upgrade ─────────────────────────────────────────────────
   function abrirModalUpgrade(recurso) {
-    fecharModalUpgrade(); // garante que não haja duplicado
+    fecharModalUpgrade();
 
     const overlay = document.createElement('div');
     overlay.id = 'pro-upgrade-overlay';
@@ -207,17 +157,16 @@
       </h2>
       <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#c7c7c7;">
         <strong>${escapeHtml(recurso)}</strong> faz parte da versão
-        <strong>PRO</strong> do FinanceFlow. Desbloqueie por
-        <strong>${PRECO_PRO_TEXTO}</strong> (pagamento único, sem mensalidade)
-        e tenha acesso completo a Investimentos, Metas e Educação Financeira
-        para sempre.
+        <strong>PRO</strong> do FinanceFlow. Assine por
+        <strong>R$ 29,90/mês</strong> e tenha acesso completo a
+        Investimentos, Metas e Educação Financeira.
       </p>
       <button id="pro-btn-desbloquear" style="
         width:100%;padding:14px;border:none;border-radius:10px;
         background:#009ee3;color:#fff;font-size:15px;font-weight:700;
         cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
       ">
-        Desbloquear com Mercado Pago
+        Assinar com Mercado Pago
       </button>
       <button id="pro-btn-fechar" style="
         margin-top:12px;width:100%;padding:10px;border:none;background:transparent;
@@ -248,10 +197,7 @@
     return d.innerHTML;
   }
 
-  // ============================================================================
-  // PASSO 2 — Disparo do checkout (Front-end → Back-end)
-  // ============================================================================
-  async function iniciarPagamentoMercadoPago() {
+  function iniciarPagamentoMercadoPago() {
     let email = localStorage.getItem('user_email');
 
     if (!email) {
@@ -263,39 +209,9 @@
       localStorage.setItem('user_email', email);
     }
 
-    const botao = document.getElementById('pro-btn-desbloquear');
-    const textoOriginal = botao ? botao.textContent : null;
-    if (botao) {
-      botao.disabled = true;
-      botao.textContent = 'Gerando pagamento...';
-    }
-
-    try {
-      const resp = await fetch(`${BACKEND_URL}/api/criar-preferencia-mp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await resp.json();
-
-      if (!resp.ok || !data.init_point) {
-        throw new Error(data.erro || 'Não foi possível gerar o pagamento.');
-      }
-
-      window.location.href = data.init_point;
-    } catch (err) {
-      console.error('[FinanceFlow PRO] erro ao criar pagamento:', err);
-      alert('Não foi possível iniciar o pagamento agora. Tente novamente em instantes.');
-      if (botao) {
-        botao.disabled = false;
-        botao.textContent = textoOriginal;
-      }
-    }
+    window.location.href = PLANO_ASSINATURA_URL;
   }
 
-  // ============================================================================
-  // PASSO 5 — Sincronização pós-pagamento (polling)
-  // ============================================================================
   function telaConfirmandoPagamento() {
     const overlay = document.createElement('div');
     overlay.id = 'pro-confirmando-overlay';
@@ -339,7 +255,7 @@
   function iniciarPollingConfirmacao(email) {
     telaConfirmandoPagamento();
 
-    const MAX_TENTATIVAS = 40; // 40 x 3s = ~2 minutos
+    const MAX_TENTATIVAS = 40;
     let tentativas = 0;
 
     const intervalo = setInterval(async () => {
@@ -369,7 +285,6 @@
     const status = params.get('status');
     if (!status) return false;
 
-    // Limpa a URL (?status=sucesso etc.) sem recarregar a página.
     const urlLimpa = window.location.origin + window.location.pathname;
     window.history.replaceState({}, document.title, urlLimpa);
 
@@ -385,8 +300,6 @@
     return false;
   }
 
-  // Roda toda vez que o app abre, pra pegar o caso de alguém que pagou,
-  // fechou o app antes de voltar (sem "?status=sucesso" na URL), e reabriu.
   async function verificarProAoAbrir() {
     if (ehPro()) return;
     const email = localStorage.getItem('user_email');
@@ -398,7 +311,6 @@
     }
   }
 
-  // ── Inicialização ────────────────────────────────────────────────────
   function init() {
     const jaTratouRetorno = checarRetornoDoCheckout();
     bloquearRecursosPro();
@@ -412,6 +324,5 @@
     init();
   }
 
-  // Exposto globalmente só para depuração manual, se precisar.
   window.FinanceFlowPro = { iniciarPagamentoMercadoPago, ehPro };
 })();
