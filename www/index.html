@@ -2772,6 +2772,28 @@ function _mostrarBotaoVozFallbackSeNecessario() {
   if (!isNative) _tryAutoVoiceFromWebLink();
 })();
 
+function _tryAutoTextFromWebLink(attempts) {
+  attempts = attempts || 0;
+  let texto = null;
+  try {
+    const params = new URLSearchParams(location.search);
+    texto = params.get('texto');
+    if (!texto || !texto.trim()) return;
+  } catch (e) { return; }
+  const appVisible = document.getElementById('app') && document.getElementById('app').style.display !== 'none';
+  const dbReady = typeof DB !== 'undefined' && DB && DB.transacoes;
+  if (appVisible && dbReady) {
+    setTimeout(() => { if (window.processVoiceInput) window.processVoiceInput(texto); }, 400);
+  } else if (attempts < 25) {
+    setTimeout(() => _tryAutoTextFromWebLink(attempts + 1), 300);
+  }
+}
+(function setupTextWebLink() {
+  const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+  if (!isNative) _tryAutoTextFromWebLink();
+})();
+
+
 function renderTxPage() {
   let txs=[...DB.transacoes];
   const srch=(document.getElementById('tx-srch').value||'').toLowerCase().trim();
