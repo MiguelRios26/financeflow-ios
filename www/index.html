@@ -2737,6 +2737,41 @@ function _tryAutoVoiceFromDeepLink(url, attempts) {
   }
 })();
 
+function _tryAutoVoiceFromWebLink(attempts) {
+  attempts = attempts || 0;
+  try {
+    if (!/[?&#]voz=1\b/.test(location.href)) return;
+  } catch (e) { return; }
+  const appVisible = document.getElementById('app') && document.getElementById('app').style.display !== 'none';
+  const dbReady = typeof DB !== 'undefined' && DB && DB.transacoes;
+  if (appVisible && dbReady) {
+    setTimeout(() => {
+      if (window.startVoiceCommand) window.startVoiceCommand();
+      setTimeout(() => { _mostrarBotaoVozFallbackSeNecessario(); }, 1300);
+    }, 400);
+  } else if (attempts < 25) {
+    setTimeout(() => _tryAutoVoiceFromWebLink(attempts + 1), 300);
+  }
+}
+function _mostrarBotaoVozFallbackSeNecessario() {
+  const fab = typeof _voiceFab === 'function' ? _voiceFab() : null;
+  if (fab && fab.classList.contains('listening')) return;
+  if (document.getElementById('voz-fallback-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'voz-fallback-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#060809;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;color:#fff;font-family:inherit;padding:20px;box-sizing:border-box;';
+  overlay.innerHTML = '<div style="font-size:56px;">🎤</div><div style="font-size:17px;font-weight:700;text-align:center;">Toque para falar seu gasto ou ganho</div><button id="voz-fallback-btn" style="padding:16px 36px;border:none;border-radius:14px;background:#009ee3;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">Toque aqui</button>';
+  document.body.appendChild(overlay);
+  document.getElementById('voz-fallback-btn').onclick = function() {
+    overlay.remove();
+    if (window.startVoiceCommand) window.startVoiceCommand();
+  };
+}
+(function setupVoiceWebLink() {
+  const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+  if (!isNative) _tryAutoVoiceFromWebLink();
+})();
+
 function renderTxPage() {
   let txs=[...DB.transacoes];
   const srch=(document.getElementById('tx-srch').value||'').toLowerCase().trim();
