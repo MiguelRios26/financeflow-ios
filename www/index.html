@@ -2772,6 +2772,24 @@ function _mostrarBotaoVozFallbackSeNecessario() {
   if (!isNative) _tryAutoVoiceFromWebLink();
 })();
 
+function _autoLoginSemPinParaVoz() {
+  try {
+    const savedUser = JSON.parse(localStorage.getItem('ff_last_user')||'null');
+    if (!savedUser) return false;
+    const users = JSON.parse(localStorage.getItem('ff_users')||'[]');
+    const u = users.find(x=>x.id===savedUser.id);
+    if (!u) return false;
+    if (typeof loadUser === 'function') loadUser(u.id);
+    DB.user = {perfil_inv: u.perfil_inv || (DB.user && DB.user.perfil_inv), id:u.id, nm:u.nm, em:u.em, pf:u.pf};
+    if (typeof saveLocal === 'function') saveLocal();
+    if (typeof initFirebase === 'function') { try { initFirebase(); } catch(e) {} }
+    const loginScreen = document.getElementById('login-screen');
+    const appEl = document.getElementById('app');
+    if (loginScreen) loginScreen.style.display = 'none';
+    if (appEl) appEl.style.display = 'flex';
+    return true;
+  } catch (e) { return false; }
+}
 function _tryAutoTextFromWebLink(attempts) {
   attempts = attempts || 0;
   let texto = null;
@@ -2781,12 +2799,18 @@ function _tryAutoTextFromWebLink(attempts) {
     if (!texto || !texto.trim()) return;
   } catch (e) { return; }
   const appVisible = document.getElementById('app') && document.getElementById('app').style.display !== 'none';
-  const dbReady = typeof DB !== 'undefined' && DB && DB.transacoes;
-  if (appVisible && dbReady) {
+  if (appVisible) {
     setTimeout(() => { if (window.processVoiceInput) window.processVoiceInput(texto); }, 400);
-  } else if (attempts < 25) {
-    setTimeout(() => _tryAutoTextFromWebLink(attempts + 1), 300);
+    return;
   }
+  if (typeof DB !== 'undefined' && DB) {
+    const ok = _autoLoginSemPinParaVoz();
+    if (ok) {
+      setTimeout(() => { if (window.processVoiceInput) window.processVoiceInput(texto); }, 500);
+      return;
+    }
+  }
+  if (attempts < 25) setTimeout(() => _tryAutoTextFromWebLink(attempts + 1), 300);
 }
 (function setupTextWebLink() {
   const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
