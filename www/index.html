@@ -2774,11 +2774,14 @@ function _mostrarBotaoVozFallbackSeNecessario() {
 
 function _autoLoginSemPinParaVoz() {
   try {
-    const savedUser = JSON.parse(localStorage.getItem('ff_last_user')||'null');
-    if (!savedUser) return false;
-    const users = JSON.parse(localStorage.getItem('ff_users')||'[]');
+    const savedUserRaw = localStorage.getItem('ff_last_user');
+    if (!savedUserRaw) return { ok:false, motivo:'Nenhum usuário salvo neste Safari (ff_last_user ausente).' };
+    const savedUser = JSON.parse(savedUserRaw);
+    const usersRaw = localStorage.getItem('ff_users');
+    const users = JSON.parse(usersRaw||'[]');
+    if (!users.length) return { ok:false, motivo:'Lista de usuários vazia neste Safari (ff_users ausente/vazia). Total de chaves no localStorage: ' + localStorage.length };
     const u = users.find(x=>x.id===savedUser.id);
-    if (!u) return false;
+    if (!u) return { ok:false, motivo:'Usuário salvo não corresponde a nenhum da lista (' + users.length + ' usuário(s) encontrados).' };
     if (typeof loadUser === 'function') loadUser(u.id);
     DB.user = {perfil_inv: u.perfil_inv || (DB.user && DB.user.perfil_inv), id:u.id, nm:u.nm, em:u.em, pf:u.pf};
     if (typeof saveLocal === 'function') saveLocal();
@@ -2787,8 +2790,17 @@ function _autoLoginSemPinParaVoz() {
     const appEl = document.getElementById('app');
     if (loginScreen) loginScreen.style.display = 'none';
     if (appEl) appEl.style.display = 'flex';
-    return true;
-  } catch (e) { return false; }
+    return { ok:true, motivo:'' };
+  } catch (e) { return { ok:false, motivo:'Erro: ' + e.message }; }
+}
+function _mostrarDiagnosticoVoz(motivo) {
+  if (document.getElementById('voz-diag-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'voz-diag-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#060809;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#fff;font-family:inherit;padding:24px;box-sizing:border-box;text-align:center;';
+  overlay.innerHTML = '<div style="font-size:44px;">⚠️</div><div style="font-size:16px;font-weight:700;">Não consegui registrar automaticamente</div><div style="font-size:14px;opacity:0.85;line-height:1.4;">' + (motivo || 'motivo desconhecido') + '</div><button id="voz-diag-btn" style="margin-top:8px;padding:14px 28px;border:none;border-radius:12px;background:#009ee3;color:#fff;font-size:15px;font-weight:700;">Fechar</button>';
+  document.body.appendChild(overlay);
+  document.getElementById('voz-diag-btn').onclick = function() { overlay.remove(); };
 }
 function _tryAutoTextFromWebLink(attempts) {
   attempts = attempts || 0;
@@ -2804,9 +2816,12 @@ function _tryAutoTextFromWebLink(attempts) {
     return;
   }
   if (typeof DB !== 'undefined' && DB) {
-    const ok = _autoLoginSemPinParaVoz();
-    if (ok) {
+    const r = _autoLoginSemPinParaVoz();
+    if (r.ok) {
       setTimeout(() => { if (window.processVoiceInput) window.processVoiceInput(texto); }, 500);
+      return;
+    } else {
+      setTimeout(() => { _mostrarDiagnosticoVoz(r.motivo); }, 500);
       return;
     }
   }
