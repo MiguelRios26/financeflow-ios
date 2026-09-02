@@ -2614,38 +2614,9 @@ async function startVoiceCommand() {
   try {
     const platform = window.Capacitor && window.Capacitor.getPlatform ? window.Capacitor.getPlatform() : 'web';
 
-    // No iOS usamos o plugin nativo proprio VoiceCapture (1 toque, sem interacao extra).
-    // Se por algum motivo ele nao estiver disponivel, caimos no ditado do teclado.
+    // No iOS usamos o ditado nativo do teclado (ver _openVoiceDictationPrompt acima).
     if (platform === 'ios') {
-      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VoiceCapture) {
-        const VC = window.Capacitor.Plugins.VoiceCapture;
-        _setVoiceListening(true);
-        toast('🎤 Ouvindo... diga, por exemplo: "Gastei 50 reais no mercado"', 'i', 4000);
-        VC.startListening().then(result => {
-          _setVoiceListening(false);
-          _voiceBusy = false;
-          const texto = result && result.text ? String(result.text).trim() : '';
-          if (texto) processVoiceInput(texto);
-          else toast('Não entendi. Tente novamente.', 'e', 4000);
-        }).catch(err => {
-          _setVoiceListening(false);
-          _voiceBusy = false;
-          toast('Erro no microfone: ' + (err && err.message ? err.message : err), 'e', 4000);
-          _openVoiceDictationPrompt();
-        });
-        return;
-      }
       _voiceBusy = false;
-      try {
-        const plat = (window.Capacitor && window.Capacitor.getPlatform) ? window.Capacitor.getPlatform() : '?';
-        const isNative = window.Capacitor && window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : '?';
-        const pluginNames = (window.Capacitor && window.Capacitor.Plugins) ? Object.keys(window.Capacitor.Plugins).join(', ') : '(sem Capacitor.Plugins)';
-        setTimeout(() => {
-          window.alert('DIAGNOSTICO VOZ\nplataforma: ' + plat + '\nisNative: ' + isNative + '\nplugins (' + (window.Capacitor && window.Capacitor.Plugins ? Object.keys(window.Capacitor.Plugins).length : 0) + '): ' + pluginNames);
-        }, 300);
-      } catch (diagErr) {
-        setTimeout(() => { window.alert('Erro no diagnostico: ' + diagErr.message); }, 300);
-      }
       _openVoiceDictationPrompt();
       return;
     }
@@ -2736,102 +2707,6 @@ function _tryAutoVoiceFromDeepLink(url, attempts) {
     CapApp.getLaunchUrl().then((res) => { if (res && res.url) _tryAutoVoiceFromDeepLink(res.url); }).catch(() => {});
   }
 })();
-
-function _tryAutoVoiceFromWebLink(attempts) {
-  attempts = attempts || 0;
-  try {
-    if (!/[?&#]voz=1\b/.test(location.href)) return;
-  } catch (e) { return; }
-  const appVisible = document.getElementById('app') && document.getElementById('app').style.display !== 'none';
-  const dbReady = typeof DB !== 'undefined' && DB && DB.transacoes;
-  if (appVisible && dbReady) {
-    setTimeout(() => {
-      if (window.startVoiceCommand) window.startVoiceCommand();
-      setTimeout(() => { _mostrarBotaoVozFallbackSeNecessario(); }, 1300);
-    }, 400);
-  } else if (attempts < 25) {
-    setTimeout(() => _tryAutoVoiceFromWebLink(attempts + 1), 300);
-  }
-}
-function _mostrarBotaoVozFallbackSeNecessario() {
-  const fab = typeof _voiceFab === 'function' ? _voiceFab() : null;
-  if (fab && fab.classList.contains('listening')) return;
-  if (document.getElementById('voz-fallback-overlay')) return;
-  const overlay = document.createElement('div');
-  overlay.id = 'voz-fallback-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#060809;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;color:#fff;font-family:inherit;padding:20px;box-sizing:border-box;';
-  overlay.innerHTML = '<div style="font-size:56px;">🎤</div><div style="font-size:17px;font-weight:700;text-align:center;">Toque para falar seu gasto ou ganho</div><button id="voz-fallback-btn" style="padding:16px 36px;border:none;border-radius:14px;background:#009ee3;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">Toque aqui</button>';
-  document.body.appendChild(overlay);
-  document.getElementById('voz-fallback-btn').onclick = function() {
-    overlay.remove();
-    if (window.startVoiceCommand) window.startVoiceCommand();
-  };
-}
-(function setupVoiceWebLink() {
-  const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
-  if (!isNative) _tryAutoVoiceFromWebLink();
-})();
-
-function _autoLoginSemPinParaVoz() {
-  try {
-    const savedUserRaw = localStorage.getItem('ff_last_user');
-    if (!savedUserRaw) return { ok:false, motivo:'Nenhum usuário salvo neste Safari (ff_last_user ausente).' };
-    const savedUser = JSON.parse(savedUserRaw);
-    const usersRaw = localStorage.getItem('ff_users');
-    const users = JSON.parse(usersRaw||'[]');
-    if (!users.length) return { ok:false, motivo:'Lista de usuários vazia neste Safari (ff_users ausente/vazia). Total de chaves no localStorage: ' + localStorage.length };
-    const u = users.find(x=>x.id===savedUser.id);
-    if (!u) return { ok:false, motivo:'Usuário salvo não corresponde a nenhum da lista (' + users.length + ' usuário(s) encontrados).' };
-    if (typeof loadUser === 'function') loadUser(u.id);
-    DB.user = {perfil_inv: u.perfil_inv || (DB.user && DB.user.perfil_inv), id:u.id, nm:u.nm, em:u.em, pf:u.pf};
-    if (typeof saveLocal === 'function') saveLocal();
-    if (typeof initFirebase === 'function') { try { initFirebase(); } catch(e) {} }
-    const loginScreen = document.getElementById('login-screen');
-    const appEl = document.getElementById('app');
-    if (loginScreen) loginScreen.style.display = 'none';
-    if (appEl) appEl.style.display = 'flex';
-    return { ok:true, motivo:'' };
-  } catch (e) { return { ok:false, motivo:'Erro: ' + e.message }; }
-}
-function _mostrarDiagnosticoVoz(motivo) {
-  if (document.getElementById('voz-diag-overlay')) return;
-  const overlay = document.createElement('div');
-  overlay.id = 'voz-diag-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#060809;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#fff;font-family:inherit;padding:24px;box-sizing:border-box;text-align:center;';
-  overlay.innerHTML = '<div style="font-size:44px;">⚠️</div><div style="font-size:16px;font-weight:700;">Não consegui registrar automaticamente</div><div style="font-size:14px;opacity:0.85;line-height:1.4;">' + (motivo || 'motivo desconhecido') + '</div><button id="voz-diag-btn" style="margin-top:8px;padding:14px 28px;border:none;border-radius:12px;background:#009ee3;color:#fff;font-size:15px;font-weight:700;">Fechar</button>';
-  document.body.appendChild(overlay);
-  document.getElementById('voz-diag-btn').onclick = function() { overlay.remove(); };
-}
-function _tryAutoTextFromWebLink(attempts) {
-  attempts = attempts || 0;
-  let texto = null;
-  try {
-    const params = new URLSearchParams(location.search);
-    texto = params.get('texto');
-    if (!texto || !texto.trim()) return;
-  } catch (e) { return; }
-  const appVisible = document.getElementById('app') && document.getElementById('app').style.display !== 'none';
-  if (appVisible) {
-    setTimeout(() => { if (window.processVoiceInput) window.processVoiceInput(texto); }, 400);
-    return;
-  }
-  if (typeof DB !== 'undefined' && DB) {
-    const r = _autoLoginSemPinParaVoz();
-    if (r.ok) {
-      setTimeout(() => { if (window.processVoiceInput) window.processVoiceInput(texto); }, 500);
-      return;
-    } else {
-      setTimeout(() => { _mostrarDiagnosticoVoz(r.motivo); }, 500);
-      return;
-    }
-  }
-  if (attempts < 25) setTimeout(() => _tryAutoTextFromWebLink(attempts + 1), 300);
-}
-(function setupTextWebLink() {
-  const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
-  if (!isNative) _tryAutoTextFromWebLink();
-})();
-
 
 function renderTxPage() {
   let txs=[...DB.transacoes];
@@ -5348,11 +5223,54 @@ function fixContentHeight() {
 window.addEventListener('load', () => { fixContentHeight(); setTimeout(fixContentHeight, 500); });
 document.addEventListener('DOMContentLoaded', fixContentHeight);
 
+// ── AUTO-LOGIN: mantém a pessoa logada entre uma abertura e outra do app ──
+// Se existir uma sessão salva (ff_session) de um login anterior bem-sucedido,
+// entra direto no app, sem pedir e-mail/senha nem PIN novamente. Se o
+// usuário sair manualmente (doLogout), a sessão é apagada e a tela de login
+// volta a aparecer normalmente.
+(function attemptAutoLogin(){
+  try {
+    const savedSession = JSON.parse(localStorage.getItem('ff_session')||'null');
+    if(!savedSession || !savedSession.id) return;
+
+    let u = null;
+    if(savedSession.id === 'demo') {
+      u = savedSession;
+    } else {
+      const users = JSON.parse(localStorage.getItem('ff_users')||'[]');
+      u = users.find(x=>x.id===savedSession.id);
+    }
+    if(!u) return; // sem correspondência local — mantém tela de login normal
+
+    loadUser(u.id);
+    DB.user = {...DB.user, perfil_inv: u.perfil_inv || DB.user?.perfil_inv, id:u.id, nm:u.nm, em:u.em, pf:u.pf};
+    saveLocal();
+
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='flex';
+
+    setTimeout(()=>{
+      try {
+        initApp();
+        // sincroniza com a nuvem em segundo plano, sem travar a entrada
+        if(u.pw){
+          try {
+            const _pin = decodeURIComponent(escape(atob(u.pw)));
+            initFirebase();
+            _comTimeout(_fbAuthSync(u.em, _pin, false), 6000).then(uidFb=>{
+              if(uidFb){ _fbUid = uidFb; _comTimeout(_puxarDadosMaisRecentesDaNuvem(uidFb), 6000); }
+            }).catch(()=>{});
+          } catch(e) {}
+        }
+      } catch(e) { goPage('dashboard'); }
+    }, 100);
+  } catch(e) {
+    // qualquer erro aqui: cai no comportamento padrão (tela de login normal)
+  }
+})();
+
 </script>
 <script src="premium-paywall.js"></script>
 </body>
 </html>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
-
-
-
