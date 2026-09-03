@@ -2630,7 +2630,8 @@ async function startVoiceCommand() {
         }).catch(err => {
           _setVoiceListening(false);
           _voiceBusy = false;
-          toast('Erro no microfone: ' + (err && err.message ? err.message : err), 'e', 4000);
+          const msg = (err && err.message ? err.message : String(err));
+          setTimeout(() => { window.alert('ERRO NO MICROFONE NATIVO:\n' + msg); }, 100);
           _openVoiceDictationPrompt();
         });
         return;
