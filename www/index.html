@@ -2614,9 +2614,39 @@ async function startVoiceCommand() {
   try {
     const platform = window.Capacitor && window.Capacitor.getPlatform ? window.Capacitor.getPlatform() : 'web';
 
-    // No iOS usamos o ditado nativo do teclado (ver _openVoiceDictationPrompt acima).
+    // No iOS usamos o plugin nativo proprio VoiceCapture (1 toque, sem interacao extra).
+    // Se por algum motivo ele nao estiver disponivel, caimos no ditado do teclado.
     if (platform === 'ios') {
+      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VoiceCapture) {
+        const VC = window.Capacitor.Plugins.VoiceCapture;
+        _setVoiceListening(true);
+        toast('🎤 Ouvindo... diga, por exemplo: "Gastei 50 reais no mercado"', 'i', 4000);
+        VC.startListening().then(result => {
+          _setVoiceListening(false);
+          _voiceBusy = false;
+          const texto = result && result.text ? String(result.text).trim() : '';
+          if (texto) processVoiceInput(texto);
+          else toast('Não entendi. Tente novamente.', 'e', 4000);
+        }).catch(err => {
+          _setVoiceListening(false);
+          _voiceBusy = false;
+          const msg = (err && err.message ? err.message : String(err));
+          setTimeout(() => { window.alert('ERRO NO MICROFONE NATIVO:\n' + msg); }, 100);
+          _openVoiceDictationPrompt();
+        });
+        return;
+      }
       _voiceBusy = false;
+      try {
+        const plat = (window.Capacitor && window.Capacitor.getPlatform) ? window.Capacitor.getPlatform() : '?';
+        const isNative = window.Capacitor && window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : '?';
+        const pluginNames = (window.Capacitor && window.Capacitor.Plugins) ? Object.keys(window.Capacitor.Plugins).join(', ') : '(sem Capacitor.Plugins)';
+        setTimeout(() => {
+          window.alert('DIAGNOSTICO VOZ\nplataforma: ' + plat + '\nisNative: ' + isNative + '\nplugins (' + (window.Capacitor && window.Capacitor.Plugins ? Object.keys(window.Capacitor.Plugins).length : 0) + '): ' + pluginNames);
+        }, 300);
+      } catch (diagErr) {
+        setTimeout(() => { window.alert('Erro no diagnostico: ' + diagErr.message); }, 300);
+      }
       _openVoiceDictationPrompt();
       return;
     }
@@ -2694,19 +2724,35 @@ function _tryAutoVoiceFromDeepLink(url, attempts) {
   if (!url || !/voice/i.test(url)) return;
   const appVisible = document.getElementById('app') && document.getElementById('app').style.display !== 'none';
   const dbReady = typeof DB !== 'undefined' && DB && DB.transacoes;
-  if (appVisible && dbReady) {
+  const platform = window.Capacitor && window.Capacitor.getPlatform ? window.Capacitor.getPlatform() : 'web';
+  // No iOS, espera também o plugin nativo VoiceCapture estar registrado pela ponte
+  // do Capacitor antes de chamar startVoiceCommand — se chamarmos cedo demais
+  // (logo no boot, antes do bridge terminar de registrar os plugins nativos),
+  // o app cai sem querer no ditado do teclado por achar que o plugin não existe.
+  const voiceReady = platform !== 'ios' || (window.Capacitor && window.Capacitor.Plugins && !!window.Capacitor.Plugins.VoiceCapture);
+  // Depois de 40 tentativas (12s), desiste de esperar o plugin nativo e chama
+  // startVoiceCommand mesmo assim — assim, se o plugin realmente nunca aparecer,
+  // pelo menos mostra o diagnóstico/teclado em vez de não acontecer nada.
+  if (appVisible && dbReady && (voiceReady || attempts >= 40)) {
     setTimeout(() => { if (window.startVoiceCommand) window.startVoiceCommand(); }, 400);
-  } else if (attempts < 25) {
+  } else if (attempts < 40) {
     setTimeout(() => _tryAutoVoiceFromDeepLink(url, attempts + 1), 300);
   }
 }
-(function setupVoiceDeepLink() {
+function setupVoiceDeepLink(attempts) {
+  attempts = attempts || 0;
   if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
     const CapApp = window.Capacitor.Plugins.App;
     CapApp.addListener('appUrlOpen', (data) => { _tryAutoVoiceFromDeepLink(data && data.url); });
     CapApp.getLaunchUrl().then((res) => { if (res && res.url) _tryAutoVoiceFromDeepLink(res.url); }).catch(() => {});
+  } else if (attempts < 40) {
+    // Bridge nativo do Capacitor ainda não terminou de registrar os plugins —
+    // tenta de novo em vez de simplesmente desistir (senão o widget da tela de
+    // bloqueio nunca abre o app direto no comando de voz).
+    setTimeout(() => setupVoiceDeepLink(attempts + 1), 300);
   }
-})();
+}
+setupVoiceDeepLink();
 
 function renderTxPage() {
   let txs=[...DB.transacoes];
