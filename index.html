@@ -2729,7 +2729,10 @@ function _tryAutoVoiceFromDeepLink(url, attempts) {
   // (logo no boot, antes do bridge terminar de registrar os plugins nativos),
   // o app cai sem querer no ditado do teclado por achar que o plugin não existe.
   const voiceReady = platform !== 'ios' || (window.Capacitor && window.Capacitor.Plugins && !!window.Capacitor.Plugins.VoiceCapture);
-  if (appVisible && dbReady && voiceReady) {
+  // Depois de 40 tentativas (12s), desiste de esperar o plugin nativo e chama
+  // startVoiceCommand mesmo assim — assim, se o plugin realmente nunca aparecer,
+  // pelo menos mostra o diagnóstico/teclado em vez de não acontecer nada.
+  if (appVisible && dbReady && (voiceReady || attempts >= 40)) {
     setTimeout(() => { if (window.startVoiceCommand) window.startVoiceCommand(); }, 400);
   } else if (attempts < 40) {
     setTimeout(() => _tryAutoVoiceFromDeepLink(url, attempts + 1), 300);
