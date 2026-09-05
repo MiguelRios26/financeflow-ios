@@ -2554,7 +2554,7 @@ function processVoiceInput(text) {
     save(); updateBadges();
     if (typeof renderPage === 'function') renderPage(currentPage);
 
-    toast(`🎤 ${tp==='receita'?'Receita':'Gasto'} de ${fmt(vl)} registrado(a)!`, 's', 5000);
+    toast(`🎤 [ouvi: "${low}"] ${tp==='receita'?'Receita':'Gasto'} de ${fmt(vl)} registrado(a)!`, 's', 7000);
     if (window.AppBridge && typeof window.AppBridge.transactionRegistered === 'function') {
       window.AppBridge.transactionRegistered(desc, vl.toFixed(2), tp);
     }
