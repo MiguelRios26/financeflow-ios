@@ -2522,8 +2522,8 @@ function processVoiceInput(text) {
     // 2) Receita ou despesa — verbos de gasto têm prioridade (ex.: "fiz uma
     // compra" deve ser despesa mesmo contendo "fiz"), senão verifica receita,
     // senão cai no padrão despesa.
-    const despesaKw = ['gastei','gasto','comprei','compra','paguei','pagamento'];
-    const receitaKw = ['recebi','ganhei','entrou','caiu','depositei','recebimento','salario','fiz','vendi','venda'];
+    const despesaKw = ['gastei','gasto','comprei','compra','paguei','pagamento','saiu','debito','boleto'];
+    const receitaKw = ['recebi','ganhei','ganho','entrou','caiu','depositei','recebimento','salario','fiz','vendi','venda','receita','renda','entrada','lucro','faturei','faturamento','bonus','comissao','reembolso','pix recebido'];
     const tp = despesaKw.some(k=>low.includes(k)) ? 'despesa' : (receitaKw.some(k=>low.includes(k)) ? 'receita' : 'despesa');
 
     // 3) Categoria (por palavras-chave)
