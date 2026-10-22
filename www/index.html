@@ -2157,10 +2157,42 @@ function switchAccount() {
   toast('Selecione a conta.','i');
 }
 
-function deleteAccount() {
-  if(!confirm('Excluir sua conta permanentemente? Todos os dados serão apagados. Esta ação é irreversível.')) return;
+async function deleteAccount() {
+  if(!confirm('Excluir sua conta permanentemente? Todos os dados serão apagados, inclusive os salvos na nuvem. Esta ação é irreversível.')) return;
   const users = JSON.parse(localStorage.getItem('ff_users')||'[]');
   const em = DB.user.em;
+  // Apaga também os dados na nuvem (Firestore) e a conta de login (Firebase Auth).
+  // Exigência da Apple (guideline 5.1.1): excluir a conta deve remover os dados no servidor.
+  try {
+    initFirebase();
+    if (_fbAuth) {
+      const _u = users.find(x => x.em === em);
+      let fbUser = _fbAuth.currentUser;
+      if (!fbUser && _u && _u.pw) {
+        try {
+          const _pin = decodeURIComponent(escape(atob(_u.pw)));
+          const cred = await _fbAuth.signInWithEmailAndPassword(em, _pin);
+          fbUser = cred.user;
+        } catch(e) {}
+      }
+      if (fbUser) {
+        if (_fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
+        try { await _fbDb.collection('users').doc(fbUser.uid).delete(); } catch(e) {}
+        try {
+          await fbUser.delete();
+        } catch(e) {
+          // Login antigo demais: reautentica com o PIN salvo e tenta de novo
+          if (e && e.code === 'auth/requires-recent-login' && _u && _u.pw) {
+            try {
+              const _pin2 = decodeURIComponent(escape(atob(_u.pw)));
+              const cred2 = await _fbAuth.signInWithEmailAndPassword(em, _pin2);
+              await cred2.user.delete();
+            } catch(e2) {}
+          }
+        }
+      }
+    }
+  } catch(e) {}
   const newUsers = users.filter(u => u.em !== em);
   localStorage.setItem('ff_users', JSON.stringify(newUsers));
   localStorage.removeItem('ff_db_' + em);
