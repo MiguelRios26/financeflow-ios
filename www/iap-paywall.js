@@ -49,7 +49,7 @@
 
   function emailAtual() {
     try {
-      return (window.DB && DB.user && DB.user.em ? String(DB.user.em) : '').trim().toLowerCase();
+      return (typeof DB !== 'undefined' && DB && DB.user && DB.user.em ? String(DB.user.em) : '').trim().toLowerCase();
     } catch (e) { return ''; }
   }
 
